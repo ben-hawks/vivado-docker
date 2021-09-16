@@ -85,7 +85,7 @@ ARG REFERENCE_SPLIT_MD5SUM_LIST="63fe052446a8f3984b009b668edf0b28;\
 
 RUN cat /opt/setup_ivarch.txt >> /etc/yum.conf \
     && rpm --import http://www.ivarch.com/personal/public-key.txt \
-    && yum -y install gcc gcc-c++ make java-1.8.0-openjdk libXrender-devel libXtst-devel xorg-x11-server-Xorg xorg-x11-xauth xorg-x11-apps pv wget \
+    && yum -y install gcc gcc-c++ make java-1.8.0-openjdk libXrender-devel libXtst-devel xorg-x11-server-Xorg xorg-x11-xauth xorg-x11-apps pv wget git emacs vim\
     && yum clean all \
     && df -ih \
     && mkdir -p /opt \
