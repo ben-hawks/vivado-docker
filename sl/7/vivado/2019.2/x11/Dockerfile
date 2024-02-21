@@ -15,6 +15,9 @@ ENV APPLY_Y2K22_FIX=true
 ENV INSTALL_BOARD_FILES=true
 ENV SPECIFIC_BOARD=${EMPTY:+STRING}
 
+# Install wget (rest installed after installer download for docker build caching purposes)
+RUN yum -y install wget
+
 # Cernbox download locations 
 ARG TARBALL_NAME=${INSTALLER_NAME}.tar.gz
 ARG TARBALL_PATH=/opt/${TARBALL_NAME}
@@ -22,13 +25,7 @@ ARG REFERENCE_MD5SUM=e2b2762964ef5f014591b13d77d823ab
 ARG CERNBOX_URL_LIST="https://xilinx-ax-dl.entitlenow.com/dl/ul/2019/11/08/R210260632/Xilinx_Vivado_2019.2_1106_2127.tar.gz;"
 ARG REFERENCE_SPLIT_MD5SUM_LIST="e2b2762964ef5f014591b13d77d823ab;"
 
-# Install packages
-RUN yum -y install gcc gcc-c++ make java-1.8.0-openjdk libXrender-devel libXtst-devel xorg-x11-server-Xorg xorg-x11-xauth xorg-x11-apps wget \
-    && yum clean all \
-    && df -ih \
-    && mkdir -p /opt \
-    && ls -alh /
-	
+# TODO - Add check for local version of the tarball(s), only download if not present. 
 # Download Tarball for Vivado/Vitis Install	
 RUN echo "Downloading the tarball ..." \
     && IFS='; ' read -r -a CERNBOX_URL_ARRAY <<< "${CERNBOX_URL_LIST}" \
@@ -56,6 +53,14 @@ RUN echo "Downloading the tarball ..." \
     && rm ${TARBALL_PATH} \
     && ls -alh /opt \
     && df -ih 
+	
+# Install the rest of the packages
+
+RUN yum -y install gcc gcc-c++ git java-1.8.0-openjdk libXrender-devel libXtst-devel make rh-python36 unzip wget xorg-x11-server-Xorg xorg-x11-xauth xorg-x11-apps zip\
+    && yum clean all \
+    && df -ih \
+    && mkdir -p /opt \
+    && ls -alh /
 	
 # Run Installer for Vivado/Vitis	
 RUN echo "Installing Vivado ${VERSION} ..." \
@@ -85,4 +90,4 @@ ENV DISPLAY :0
 ENV GEOMETRY 1920x1200
 ENV VERSION=${VERSION}
 
-ENTRYPOINT /opt/Xilinx/Vivado/${VERSION}/bin/vivado -mode batch
+CMD /opt/Xilinx/Vivado/${VERSION}/bin/vivado -mode batch
