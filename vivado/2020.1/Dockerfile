@@ -108,8 +108,8 @@ ENV GEOMETRY 1920x1200
 ENV VERSION=${VERSION}
 
 SHELL ["/bin/bash", "-c"]
-ENTRYPOINT [ "/usr/bin/tini", "--", "/opt/Xilinx/Vivado/2020.1/bin/vivado" ]
-# CMD ["-mode", "batch"]
+ENTRYPOINT ["/bin/bash", "-c", "&&", "source", "/home/vivado/.bashrc", "&&"]
+CMD ["vivado", "-mode", "gui"]
 
 #Flatten the image so that it's not >100GB...
 FROM scratch
