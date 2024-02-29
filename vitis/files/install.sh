@@ -1,6 +1,6 @@
 #!/bin/bash
 
-${INSTALLER_PATH}/xsetup --agree XilinxEULA,3rdPartyEULA,WebTalkTerms --batch Install --config /opt/install_config.txt
+${INSTALLER_PATH}/xsetup --agree XilinxEULA,3rdPartyEULA --batch Install --config /opt/install_config.txt
 
 #if [$INSTALL_BOARD_FILES]; then
 # Install Board files if desired

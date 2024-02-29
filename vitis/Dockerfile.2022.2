@@ -57,8 +57,9 @@ RUN echo "Unpacking the tarball ..." \
 	
 # Install the rest of the packages
 RUN dnf -y install 'dnf-command(config-manager)' \
-	&& dnf config-manager --set-enabled powertools \
-	&& dnf -y install bzip2-devel gcc gcc-c++ git java-1.8.0-openjdk kernel-devel kernel-headers libffi-devel libXrender-devel libXtst-devel make ncurses-compat-libs openssl-devel python39 unzip xorg-x11-apps xorg-x11-server-Xorg xorg-x11-xauth xorg-x11-utils zip zlib-devel\
+	&& dnf config-manager --set-enabled crb \
+	&& dnf -y install almalinux-release-devel \
+	&& dnf -y install bzip2-devel gcc gcc-c++ git java-1.8.0-openjdk kernel-devel kernel-headers libffi-devel libXrender-devel libXtst-devel make ncurses-compat-libs openssl-devel python39 unzip xorg-x11-server-Xorg xorg-x11-xauth xorg-x11-utils zip zlib-devel\
     && dnf clean all \
     && df -ih \
     && mkdir -p /opt \
@@ -71,7 +72,7 @@ COPY files/get_y2k22_fix.sh /opt/get_y2k22_fix.sh
 COPY files/install.sh /opt/install.sh
 	
 # Run Installer for Vivado/Vitis & creating vivado user/group (UID/GID defaults to 1000) 	
-RUN echo "Installing Vivado ${VERSION} ..." \
+RUN echo "Installing Vitis ${VERSION} ..." \
     && chmod +x ${INSTALLER_PATH}/xsetup \
     && chmod +x /opt/install.sh \
 	&& chmod +x /opt/get_boards.tcl \
