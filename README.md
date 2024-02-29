@@ -1,34 +1,47 @@
-# Linux Container with Xilinx Vivado/Vivado HLS
-For many reasons having Xilinx Vivado/Vivado HLS installed in a docker image can be useful. This package is setup to build docker images with various setups using the CERN GitLab docker-builder runners. The configurations for the docker builds can be found in the table below:
+# Linux Container with Xilinx Vivado/Vitis HLS
+For many reasons having Xilinx Vivado/Vitis HLS installed in a docker image can be useful. This package is setup to build docker images with various setups using the CERN GitLab docker-builder runners. The configurations for the docker builds can be found in the table below:
 
-| **Linux Flavor** | **Vivado Version** | **X11** | **VNC** | **Status** |
-| ---------------- | ------------------ | ------- | ------- | ---------- |
-| Ubuntu 18.04     | 2019.1             | Yes     | Yes     | [![pipeline status](https://gitlab.cern.ch/aperloff/vivado-docker/badges/master/pipeline.svg)](https://gitlab.cern.ch/aperloff/vivado-docker/commits/master) |
-| SL7              | 2018.2             | Yes     | No      | [![pipeline status](https://gitlab.cern.ch/aperloff/vivado-docker/badges/master/pipeline.svg)](https://gitlab.cern.ch/aperloff/vivado-docker/commits/master) | 
-| SL7              | 2019.1             | Yes     | No      | [![pipeline status](https://gitlab.cern.ch/aperloff/vivado-docker/badges/master/pipeline.svg)](https://gitlab.cern.ch/aperloff/vivado-docker/commits/master) | 
-| SL7              | 2019.2             | Yes     | No      | [![pipeline status](https://gitlab.cern.ch/aperloff/vivado-docker/badges/master/pipeline.svg)](https://gitlab.cern.ch/aperloff/vivado-docker/commits/master) | 
+| **Linux Flavor** | **Vivado Version** |
+| ---------------- | ------------------ | 
+| AlmaLinux 8      | 2020.1             | 
+| AlmaLinux 9      | 2022.2             | 
+| AlmaLinux 9      | 2023.1             | 
 
-The Ubuntu version features both X11 and VNC and is generally less secure. The Scientific Linux (SL) container was built with security in mind. It is meant to conform with the security policies laid out by Fermi National Accelerator Laboratory (FNAL).
 
 The general idea behind these containers was that they would be transient and always run with the ```--rm``` option. Any external files that needed to be used within the container could be mapped using a shared folder (i.e. ```-v <path to host folder>:<path in container>```). I never intended, nor have I tested, ssh'ing into the containers. This tends to open up security holes (i.e. root access, passwords, internal vs external port connections) that I didn't want to deal with.
 
-In general, however, it's best to lock down docker so that ssh to the remote machine is only accessible from your local machine. To do this, you can use the option ```-p 127.0.0.1:22:22``` when doing the ```ssh``` command (not ```-P```). Alternatively, you can go to the docker settings and change the default to always listen only on the local interface. Go to ```Preferences... > Daemon > Advanced``` and add the lines:
+the default entrypoint of the containers calls `<vivado|vitis> -mode gui`. If you have things configured to use X11 (see "Run Using X11" below), it will launch Vivado in the `/project` directory. 
+To actually run something with this container as it stands, You _must_ mount a project directory to the `/project` location in the docker container through a bind mount. you can do this by appending the following to your `docker run` command:
+``` bash
+--mount type=bind,source="$(pwd)"/your_vivado_project,target=/project
+```
+
+To perform more complex actions and/or use <vivado/vitis> HLS, you can override the default CMD. 
+
+In general, it's best to lock down docker so that ssh to the remote machine is only accessible from your local machine. To do this, you can use the option ```-p 127.0.0.1:22:22``` when doing the ```ssh``` command (not ```-P```). Alternatively, you can go to the docker settings and change the default to always listen only on the local interface. Go to ```Preferences... > Daemon > Advanced``` and add the lines:
 ```
 {
     "ip" : "127.0.0.1"
 }
 ```
 
+Due to the large size of the recent tools, it's likely that these images will also support and be primarily used via a "minimal" version, in which the actual tools themselves are mounted to the container from an pre-existing location (such as a Kubernetes Persistant Volume) 
+
 ## Build Instructions
-This repository was designed for the containers to be built using the CI/CD system of CERN's GitLab instance. The primary reason for this is that the Xilinx Vivado installation file is hosted on CERNBox and therefore the fastest connection to a build system will be at CERN.
-
-Using the recommended method, once changes are pushed to the GitHub repository, they are synchronized with the GitLab instance (manually or automatically) and then a CI/CD pipeline is triggered manually. From there is it just a matter of time before the containers are ready, ~1.5 hours is all is successful.
-
-Still, it is possibly to build the system somewhere other than a CERN runner. Because you will no longer be using Kaniko, the docker build will have to be configured manually. This might also result in a larger image file because of different cleanup and cache settings. The commands to run are as follows:
-
+When building the containers, they are configured so that they will look for a given "unified installer" tar.gz file in the relevant `<vivado|vitis>/files` location, and if not present will download it for the build process.
+**If the images are downloaded during the build process, they will not be saved to `<vivado|vitis>/files` location. 
+**If you are going to try and build these images regularly or tweak/develop/test them, it's highly recomended to download the installer from Xilinx's website and place it in `<vivado|vitis>/files` to avoid potentially downloading *100GB+ each build*
+**The Xilinx installers and subsiquent docker images are *very* large, with the ranging from ~40GB (Vivado 2020.1) to ~110GB (Vitis 2023.2) - Make sure you have enough free disk space (~250GB for build, ~Xilinx Installer size + 3GB for built image itself)!
+**Make sure you clean your docker build cache and dangling images after building to reclaim a large amount of disk space!!!
 ```bash
-docker login -u <CERN SSO Username> -p <CERN SSO Password> gitlab-registry.cern.ch
-docker build --pull -t <username>/vivado-docker/<container name>:<container tag> <relative path to Dockerfile>
+docker builder prune 
+docker image prune
+```
+To actually build and push a given image:
+```bash
+docker login
+cd <vivado|vitis>
+docker build --pull -t <username>/vivado-docker/<container name>:<container tag> -f <relative path to Dockerfile> .
 docker push <username>/vivado-docker/<container name>:<container tag>
 ```
 
@@ -46,7 +59,7 @@ Add the local interface to the list of acceptable connections by doing ```xhost 
 
 To open the remote program and start an x-window use the command:
 ```bash
-docker run --rm -it --net=host -e DISPLAY=host.docker.internal:0 gitlab-registry.cern.ch/aperloff/vivado-docker/<container name>:<container tag> /opt/Xilinx/Vivado/2019.1/bin/vivado
+docker run --rm -it --net=host -e DISPLAY=host.docker.internal:0 docker.io/bhawks/vivado-docker/<container name>:<container tag> /opt/Xilinx/<Vivado|Vitis>/<version>/bin/<Vivado|Vitis>
 ```
 
 **Note:** You may need to do ```docker login gitlab-registry.cern.ch``` in order to pull the image from GitLab. Use your CERN username and password.
@@ -57,7 +70,7 @@ This is a less secure method of connecting the remote program to the X11 system 
 ```bash
 IP=$(ifconfig en0 | grep inet | awk '$1=="inet" {print $2}')  # use en1 for Wifi
 xhost + $IP
-docker run --rm -it -e DISPLAY=$IP:0 -v /tmp/.X11-unix:/tmp/.X11-unix gitlab-registry.cern.ch/aperloff/vivado-docker/<container name>:<container tag> /opt/Xilinx/Vivado/2019.1/bin/vivado
+docker run --rm -it -e DISPLAY=$IP:0 -v /tmp/.X11-unix:/tmp/.X11-unix docker.io/bhawks/vivado-docker/<container name>:<container tag> /opt/Xilinx/<Vivado|Vitis>/<version>/bin/<Vivado|Vitis>
 ```
 
 **Note:** I found that at one point I needed to reset my xhost list by turning off the xhost filtering and then turning it back on ```xhost <-/+>```. At FNAL, remember to disconnect from the internet before you do this because it will be seen as opening up a hole in your firewall and get you blocked from the network.
@@ -65,7 +78,7 @@ docker run --rm -it -e DISPLAY=$IP:0 -v /tmp/.X11-unix:/tmp/.X11-unix gitlab-reg
 ### Alternate Entrypoint
 To override the entrypoint, you need to use the ```--entrypoint``` option. You may want to do this, for instance, if you want to open a bash terminal rather than Vivado directly.
 ```bash
-docker run --rm -it -e DISPLAY=$IP:0 -v /tmp/.X11-unix:/tmp/.X11-unix --entrypoint /bin/bash gitlab-registry.cern.ch/aperloff/vivado-docker/<container name>:<container tag>
+docker run --rm -it -e DISPLAY=$IP:0 -v /tmp/.X11-unix:/tmp/.X11-unix --entrypoint /bin/bash docker.io/bhawks/vivado-docker/<container name>:<container tag>
 ```
 
 ### xilinx_docker Bash Function
@@ -76,21 +89,8 @@ For a complete set of directions on how to use this utility, see the functions h
 xilinx_docker -h
 ```
 
-## Run Using VNC
-VNC is not my favorite way to interact with remote programs. Resizing of windows always seems haphazard. That being said, the Ubuntu version of this container was built with VNC available. To run it, use the command:
-
-```
-docker run --rm -ti -p 5900:5900 -v `pwd`/work:/home/vivado/ -e GEOMETRY=1920x1200 gitlab-registry.cern.ch/aperloff/vivado-docker/<container name>:<container tag>
-```
-
-You will be asked to enter a 6+ character password for the VNC server. Then on the host machine use the following command to connect to the VNC server on the container:
-
-```
-open vnc://127.0.0.1:5900
-```
-
-## CU Specific Running Instructions
-In order to access the CU Vivado license it may be necessary to set an environment variable when running the docker container using ```-e XILINXD_LICENSE_FILE=2100@torreys.colorado.edu:27016@ecee-flexlm.colorado.edu```
+## Specifying a Xilinx License Server
+In order to access the some Vivado instances/features, it may be necessary to set the Xilinx License Server location via an environment variable. When running the docker container, add ```-e XILINXD_LICENSE_FILE=<license server>```
 
 ## Command Line Access to a Currently Running Container
 If you need to access the command line for a container which is currently running you can use the following command to open up a bash prompt:
