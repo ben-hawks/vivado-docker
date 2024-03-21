@@ -26,6 +26,6 @@ ${INSTALLER_PATH}/xsetup --agree XilinxEULA,3rdPartyEULA,WebTalkTerms --batch In
     mv /tmp/y2k22_patch.zip /opt/Xilinx
     cd /opt/Xilinx
     unzip y2k22_patch.zip
-    python y2k22_patch/patch.py
+    python3 y2k22_patch/patch.py
 	rm y2k22_patch.zip
-#fi 
+#fi

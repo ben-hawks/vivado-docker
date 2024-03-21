@@ -16,7 +16,7 @@ ARG CERNBOX_URL_LIST="https://xilinx-ax-dl.entitlenow.com/dl/ul/2020/06/03/R2103
 ARG REFERENCE_SPLIT_MD5SUM_LIST="b018f7b331ab0446137756156ff944d9;"
 
 # Copy Installer if it exists, wget will not clobber file if it exists, but download if it doesn't (the build doesn't cache/export/save the tarball to this location!) 
-RUN echo "Attempting to copy installer ${BUILD_INSTALLER_PATH}/${INSTALLER_NAME}/${INSTALLER_NAME}.tar.gz to ${TARBALL_PATH}"
+RUN echo "Attempting to copy installer ${BUILD_INSTALLER_PATH}/${INSTALLER_NAME}.tar.gz to ${TARBALL_PATH}"
 COPY files/${INSTALLER_NAME}* ${INSTALL_DIR}/
 RUN ls -alh /opt/install_files 
 
@@ -108,9 +108,10 @@ ENV GEOMETRY 1920x1200
 ENV VERSION=${VERSION}
 
 SHELL ["/bin/bash", "-c"]
-ENTRYPOINT ["/bin/bash", "-c", "&&", "source", "/home/vivado/.bashrc", "&&"]
-CMD ["vivado", "-mode", "gui"]
 
 #Flatten the image so that it's not >100GB...
 FROM scratch
 COPY --from=build / /
+
+ENTRYPOINT ["/bin/bash", "-c", "&&", "source", "/home/vivado/.bashrc", "&&"]
+CMD ["vivado"]
