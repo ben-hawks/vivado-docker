@@ -2,3 +2,5 @@
 work/
 *.bin
 *.tar.gz
+/vivado/2020.1/test/
+/vivado/2020.1/files/y2k22_patch-1.2.zip
