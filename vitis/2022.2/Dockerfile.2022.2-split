@@ -1,0 +1,157 @@
+FROM almalinux/8-base:8.6 as installer
+
+# If set to true, this is intended to build two images:
+# * one image (installer) to _install_ Vivado/Vitis to a _mounted location_ (mounted to /opt/Xilinx in the container) to then be used with the corresponding "minimal" images.
+# * one image (minimal) to actually deploy and run jobs with, which assumes that the installer image has been run
+#   and the tools are installed to an external volume/mount, mounted as /opt/Xilinx in the container.
+# if set to false, it will build an "All in one" image, which includes all the tools installed and ready to use.
+# This is a huge image though (~50-125GB, depending on options), and isn't great for large/parallel deployements!
+ARG BUILDING_SPLIT=true
+
+# The directory where ${INSTALLER_NAME}.tar.gz is located relative to the build context.
+# If the file is present, it will copy the file into the image.
+# If it isn't present, it will download the file
+ENV BUILD_INSTALLER_PATH=files
+
+# Vivado/vitis Version & Installer info
+# INSTALLER_NAME - Installer tarball name without filetype (assumed .tar.gz),
+# INSTALLER_BASE_DIR - directory where the installer tarball is unpacked into and run from
+#
+ENV VERSION=2022.2
+ENV INSTALLER_NAME=Xilinx_Unified_2022.2_1014_8888
+ENV INSTALLER_BASE_DIR=/opt/installer
+ENV INSTALLER_PATH=${INSTALLER_BASE_DIR}/${INSTALLER_NAME}/
+
+# Installer download locations & md5 hash
+# supports download split tar.gz files if desired,
+# CERNBOX_URL_LIST and REFERENCE_SPLIT_MD5SUM_LIST are treated as lists seperated by '; '
+# each part will be downloaded and checked against the corresponding md5 sum, then combined before extracting if succesful
+ENV REFERENCE_MD5SUM=00000
+ENV CERNBOX_URL_LIST=""
+ENV REFERENCE_SPLIT_MD5SUM_LIST=""
+
+# Misc. Tool install options - Recomended values are the defaults
+# Apply y2k22 fix - Downloads and installs the y2k22 patch during install - required for running any tool version <2022 from 2022 onward
+# Board Files - set SPECIFIC_BOARD if only one board needs installing, or leave as SPECIFIC_BOARD=${EMPTY:+STRING} for all boards to be installed
+# Remove Versal Files - !!Large Image Size Impact (50GB+)!! Removes files for Versal support, which are installed even if not selected in install_config.txt
+ENV APPLY_Y2K22_FIX=false
+ENV REMOVE_VERSAL_FILES=false
+ENV INSTALL_BOARD_FILES=true
+ENV SPECIFIC_BOARD=${EMPTY:+STRING}
+
+# misc installer releveant values - shouldn't need to change
+# INSTALL_DIR - where the installer tarball is located (or downloaded to) in the container (NOT where the tool is actually installed)
+# TARBALL_NAME / TARBALL_PATH - Name and full path of the tarball
+# IN_BUILDER - Used during build time to control which files are deleted, if set to true while building the split image
+#              bootstrap_install.sh will delete /opt/Xilinx/*/${VERSION} after installing the tool, as the tool will be
+#              externally mounted to the container when actually run
+
+ENV INSTALL_DIR=/opt/install_files
+ENV TARBALL_NAME=${INSTALLER_NAME}.tar.gz
+ENV TARBALL_PATH=${INSTALL_DIR}/${TARBALL_NAME}
+ENV IN_BUILDER=false
+
+
+# Copy Installer if it exists, wget will not clobber file if it exists, but download if it doesn't (the build doesn't cache/export/save the tarball to this location!)
+RUN echo "Attempting to copy installer ${BUILD_INSTALLER_PATH}/${INSTALLER_NAME}.tar.gz to ${TARBALL_PATH}"
+RUN mkdir ${INSTALL_DIR}
+COPY files/${INSTALLER_NAME}* ${INSTALL_DIR}/
+RUN ls -alh /opt/install_files
+
+
+# Update Alma 8 DNF Key ( See https://almalinux.org/blog/2023-12-20-almalinux-8-key-update/ )
+RUN rpm --import https://repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+
+# Install the rest of the packages
+RUN dnf -y install 'dnf-command(config-manager)' \
+	&& dnf config-manager --set-enabled powertools \
+	&& dnf -y install bzip2-devel gcc gcc-c++ git java-1.8.0-openjdk kernel-devel kernel-headers libffi-devel libXrender-devel libXtst-devel make ncurses-compat-libs openssl-devel python39 unzip wget xorg-x11-apps xorg-x11-server-Xorg xorg-x11-xauth xorg-x11-utils xz zip zlib-devel\
+    && dnf clean all \
+    && df -ih \
+    && mkdir -p /opt \
+    && ls -alh
+
+# Copy install scripts/config
+COPY files/install_config.txt /opt/install_config.txt
+COPY files/get_boards.tcl /opt/get_boards.tcl
+COPY files/install.sh /opt/install.sh
+COPY files/bootstrap_install.sh /opt/bootstrap_install.sh
+
+RUN echo "Marking install scripts as executable..." \
+    && chmod +x /opt/bootstrap_install.sh \
+    && chmod +x /opt/install.sh \
+	&& chmod +x /opt/get_boards.tcl
+
+#add a file in the location things should be mounted to, we check for it's (lack of) presence during install to validate things are mounted properly.
+RUN mkdir /opt/Xilinx/ && touch /opt/Xilinx/.mountcheck
+
+ENV DISPLAY :0
+ENV GEOMETRY 1920x1200
+ENV VERSION=${VERSION}
+
+# use docker build --squash to compress the image during build, image should be ~size of the tool's installer tarball!
+# without squash, each layer will be massive and 2-5x the size of the image unnessicarily!
+SHELL ["/bin/bash", "-c"]
+ENTRYPOINT ["/bin/bash", "-c", "/opt/bootstrap_install.sh", "bash"]
+
+FROM installer as build-minimal
+# Preserve our arguments from previous layer because docker is wacky at times...
+ARG BUILDING_SPLIT
+
+ENV VERSION=${VERSION}
+ENV INSTALLER_NAME=${INSTALLER_NAME}
+ENV INSTALLER_BASE_DIR=${INSTALLER_BASE_DIR}
+ENV INSTALLER_PATH=${INSTALLER_PATH}
+
+ENV REFERENCE_MD5SUM=${REFERENCE_MD5SUM}
+ENV CERNBOX_URL_LIST=${CERNBOX_URL_LIST}
+ENV REFERENCE_SPLIT_MD5SUM_LIST=${REFERENCE_SPLIT_MD5SUM_LIST}
+
+ENV APPLY_Y2K22_FIX=${APPLY_Y2K22_FIX}
+ENV REMOVE_VERSAL_FILES=${REMOVE_VERSAL_FILES}
+ENV INSTALL_BOARD_FILES=${INSTALL_BOARD_FILES}
+ENV SPECIFIC_BOARD=${SPECIFIC_BOARD}
+
+ENV TARBALL_NAME=${TARBALL_NAME}
+ENV INSTALL_DIR=${INSTALL_DIR}
+ENV TARBALL_PATH=${TARBALL_PATH}
+
+#Run the installer to setup the rest of the image, deleting /opt/Xilinx/*/$VERSION from the container afterwards as it'll be installed on an external mount...
+ENV IN_BUILDER=true
+RUN ls -al /opt
+RUN source /opt/bootstrap_install.sh
+
+# Setup Vivado user details
+RUN echo "Setting up the 'vivado' user ..." \
+    && useradd -ms /bin/bash vivado \
+    && chown -R vivado /home/vivado \
+    && echo "source /opt/Xilinx/Vitis/${VERSION}/settings64.sh" >> /home/vivado/.bashrc
+
+# Copy installed BoardStore files to the new user
+#RUN mkdir -p "/home/vivado/.Xilinx/Vivado/${VERSION}/xhub/board_store/" \
+#    && cp -r /home/root/.Xilinx/Vivado/${VERSION}/xhub/board_store/ / \
+#    && ls -alh "/home/vivado/.Xilinx/Vivado/${VERSION}/xhub/board_store/"
+
+# install Tini
+RUN TINI_VERSION=`curl --silent "https://api.github.com/repos/krallin/tini/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/'` \
+	&& curl -L "https://github.com/krallin/tini/releases/download/v${TINI_VERSION}/tini_${TINI_VERSION}.rpm" > tini.rpm \
+    && rpm -i tini.rpm \
+    && rm tini.rpm
+
+# Squash the minimal image down
+FROM scratch as minimal
+# Copy details from previous steps
+COPY --from=build-minimal / /
+
+#setup final details
+USER vivado
+WORKDIR /home/vivado
+
+ENV DISPLAY :0
+ENV GEOMETRY 1920x1200
+ENV VERSION=${VERSION}
+ENV IN_BUILDER=false
+
+SHELL ["/bin/bash", "-c", "-l"]
+ENTRYPOINT ["/bin/bash", "-c", "-l"]
+CMD /bin/bash -c "source /home/vivado/.bashrc && vitis"
